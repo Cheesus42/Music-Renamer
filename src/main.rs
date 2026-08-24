@@ -5,7 +5,7 @@ use std::{env, fs};
 use lofty::error::FileParseError;
 use lofty::file::TaggedFileExt;
 use lofty::read_from_path;
-use lofty::tag::Accessor;
+use lofty::tag::{Accessor, ItemKey};
 use walkdir::WalkDir;
 
 use clap::Parser;
@@ -36,7 +36,9 @@ fn read_tags(path: &Path) -> Result<HashMap<&str, Option<String>>, FileParseErro
         .or_else(|| tagged_file.first_tag());
 
     let mut map = HashMap::new();
-    let artist = tags.and_then(|t| t.artist().map(|s| s.to_string()));
+    let artist = tags
+        .and_then(|t| t.get_string(ItemKey::AlbumArtist))
+        .map(|s| s.to_string());
     let album = tags.and_then(|t| t.album().map(|s| s.to_string()));
     let tracknumber = tags.and_then(|t| t.track().map(|s| s.to_string()));
     let title = tags.and_then(|t| t.title().map(|s| s.to_string()));
@@ -61,6 +63,11 @@ fn build_path(taglist: &HashMap<&str, Option<String>>, target: PathBuf) -> PathB
     let album = taglist["album"]
         .clone()
         .unwrap_or("[Unknown Album]".to_string());
+
+    let ext = sanitize_filename(&ext);
+    let artist = sanitize_filename(&artist);
+    let album = sanitize_filename(&album);
+
     target.join(ext).join(artist).join(album)
 }
 
@@ -70,6 +77,17 @@ fn to_asolute(path: &PathBuf) -> std::io::Result<PathBuf> {
     } else {
         Ok(env::current_dir()?.join(path))
     }
+}
+
+fn sanitize_filename(input: &str) -> String {
+    input
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '"' | '<' | '>' | '|' => '_',
+            '?' => 'q',
+            _ => c,
+        })
+        .collect()
 }
 
 fn main() {
@@ -86,7 +104,7 @@ fn main() {
         .filter(|e| e.file_type().is_file())
     {
         let e = read_tags(entry.path());
-        println!("{}", entry.path().display());
+        // println!("{}", entry.path().display());
         match e {
             Ok(list) => {
                 let target_path = build_path(&list, PathBuf::from(&dest));
@@ -96,15 +114,19 @@ fn main() {
                     .expect("Track with no title ??? please check");
                 let ext = list["ext"].clone().expect("Track with no extension ???");
 
+                let tracknumber = sanitize_filename(&tracknumber);
+                let title = sanitize_filename(&title);
+
                 let target_name = target_path.join(format!("{}-{}.{}", tracknumber, title, ext));
                 let absolute_path = to_asolute(&target_name).expect("Failed to make path absolute");
-                println!("{}", absolute_path.display());
+                // println!("{}", absolute_path.display());
                 if doit {
                     if copy {
                         fs::create_dir_all(target_path).expect("Failed to create target path");
                         fs::copy(entry.into_path(), absolute_path).expect("failed to copy file");
                     } else {
                         fs::create_dir_all(target_path).expect("Failed to create target path");
+
                         fs::rename(entry.into_path(), absolute_path)
                             .expect("Failed to rename file");
                     }
