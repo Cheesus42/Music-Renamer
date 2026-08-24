@@ -1,0 +1,9 @@
+[package]
+name = "music_renamer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.6.6", features = ["derive"] }
+lofty = "0.25.1"
+walkdir = "2.5.0"
